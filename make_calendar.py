@@ -229,20 +229,22 @@ def build_svg(year, size, theme, bleed=0.0, week_start=0, font_base="fonts", tit
     py0, py1 = m, m + hh + 2 * hpad              # panel top and bottom
     hy0 = py0 + hpad                             # top of logo and year
     slant = (py1 - py0) / 2                      # 45° edge over half the height, then vertical
-    reach = 18 * s                               # extra panel length towards the middle
+    reach = 44 * s                               # extra panel length towards the middle
     logo_w = hh * math.sqrt(3) / 2 + 0.081 * hh * math.cos(math.radians(30))
     ys = str(year)
     dw, dgap = 0.56 * hh, 0.2 * hh               # digit width, space between digits
     year_w = len(ys) * dw + (len(ys) - 1) * dgap
 
     lx = m + hpad + logo_w + hpad + reach        # logo panel: square left, slanted right
+    logo_x = (m + lx - logo_w) / 2               # logo centred in the panel's rectangular part
     fills.poly([(m, py0), (lx, py0), (lx + slant, py0 + slant), (lx + slant, py1), (m, py1)], c["weekend"])
     rx = W - m - hpad - year_w - hpad - reach    # year panel: slanted left, square right
+    year_x = (rx + W - m - year_w) / 2           # year centred in the panel's rectangular part
     fills.poly([(rx - slant, py0), (W - m, py0), (W - m, py1), (rx, py1), (rx - slant, py1 - slant)],
                c["weekend"])
 
-    labels.logo(m + hpad, hy0, hh, c["year_lo"], c["accent"], c["accent"])
-    year_x = W - m - hpad - year_w               # year in angular digits, second half in the accent
+    labels.logo(logo_x, hy0, hh, c["year_lo"], c["accent"], c["accent"])
+    # year in angular digits, second half in the accent
     for i, ch in enumerate(ys):
         col = c["year_lo"] if i < len(ys) // 2 else c["accent"]
         labels.digit(ch, year_x + i * (dw + dgap), hy0, dw, hh, 0.1 * hh, col)
