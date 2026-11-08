@@ -58,6 +58,9 @@ WD = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 
 MONO_ADV = 0.6  # JetBrains Mono advance width, em
 
+# where the header rules' thick bars sit: (top rule, bottom rule), each "left", "right" or "both"
+HEADER_BARS = ("both", "both")
+
 
 def mix(a, b, f):
     """Blend hex colour a toward b by f (0..1). A solid blend instead of real
@@ -178,17 +181,19 @@ class Layer(list):
                         f'stroke-width="{T:.3f}" stroke-linejoin="miter" stroke-miterlimit="10" '
                         f'stroke-linecap="square"/>')
 
-    def bar_rule(self, x, edge, w, bar_len, T, th, bar_col, trace_col, flip=False):
+    def bar_rule(self, x, edge, w, bar_len, T, th, bar_col, trace_col, top=False, ends="left"):
         """Header rule, a large cousin of the week-start rule: a thin trace of width w with
-        one edge on `edge`, and a heavy bar of length bar_len growing away from that edge,
-        ending in a 45° chamfer. By default the edge is the bottom and the bar sits on the
-        left; flip=True mirrors both (edge on top, bar on the right)."""
+        one edge on `edge` (its bottom edge, or its top edge if top=True), plus heavy bars of
+        length bar_len growing away from that edge at the "left", "right" or "both" ends,
+        each finishing in a 45° chamfer towards the middle."""
         ch = T - th
-        trace = [(0, -th), (w, -th), (w, 0), (0, 0)]
-        bar = [(0, -T), (bar_len, -T), (bar_len + ch, -th), (bar_len + ch, 0), (0, 0)]
-        place = (lambda u, v: (x + w - u, edge - v)) if flip else (lambda u, v: (x + u, edge + v))
-        self.poly([place(u, v) for u, v in trace], trace_col)
-        self.poly([place(u, v) for u, v in bar], bar_col)
+        sy = -1 if not top else 1                       # direction away from the edge
+        self.poly([(x, edge + sy * th), (x + w, edge + sy * th), (x + w, edge), (x, edge)], trace_col)
+        bar = [(0, T), (bar_len, T), (bar_len + ch, th), (bar_len + ch, 0), (0, 0)]
+        if ends in ("left", "both"):
+            self.poly([(x + u, edge + sy * v) for u, v in bar], bar_col)
+        if ends in ("right", "both"):
+            self.poly([(x + w - u, edge + sy * v) for u, v in bar], bar_col)
 
     def hatch(self, x0, y0, w, h, col, sw, step):
         """45° '/' hatching as plain vector lines (SVG patterns get rasterised in the PDF).
@@ -234,8 +239,8 @@ def build_svg(year, size, theme, bleed=0.0, week_start=0, font_base="fonts", tit
     label_y = lambda y: y + 1.4 * s + dsz * 0.73   # baseline of labels in a row starting at y
 
     # ---------- header ----------
-    # logo | year, sharing top and bottom lines, framed between them by two rules: the bottom
-    # one with its heavier bar at the logo end, the top one mirrored with its bar at the year end (all grey)
+    # logo | year, sharing top and bottom lines, with a frame between them: two grey rules,
+    # each with heavier chamfered bars at the ends set by HEADER_BARS
     hy0, hy1 = m, m + hh
     labels.logo(m, hy0, hh, c["year_lo"], c["accent"], c["accent"])
     logo_w = hh * math.sqrt(3) / 2 + 0.081 * hh * math.cos(math.radians(30))
@@ -247,12 +252,14 @@ def build_svg(year, size, theme, bleed=0.0, week_start=0, font_base="fonts", tit
         col = c["year_lo"] if i < len(ys) // 2 else c["accent"]
         labels.digit(ch, year_x + i * (dw + dgap), hy0, dw, hh, 0.1 * hh, col)
 
-    rx0 = m + logo_w + 5 * s                     # connector from the logo to the year
-    rx1 = year_x - 6 * s
+    rx0 = m + logo_w + 9 * s                     # connector from the logo to the year
+    rx1 = year_x - 9 * s
     bar_T, trace_th = 2.0 * s, 0.6 * s
     bar_len = 60 * s
-    rules.bar_rule(rx0, hy1, rx1 - rx0, bar_len, bar_T, trace_th, c["year_lo"], c["year_lo"])
-    rules.bar_rule(rx0, hy0, rx1 - rx0, bar_len, bar_T, trace_th, c["year_lo"], c["year_lo"], flip=True)
+    rules.bar_rule(rx0, hy1, rx1 - rx0, bar_len, bar_T, trace_th, c["year_lo"], c["year_lo"],
+                   ends=HEADER_BARS[1])
+    rules.bar_rule(rx0, hy0, rx1 - rx0, bar_len, bar_T, trace_th, c["year_lo"], c["year_lo"],
+                   top=True, ends=HEADER_BARS[0])
     if title:                                    # optional title, sitting on the bottom bar
         tsz = 9 * s
         labels.text(rx0 - 0.04 * tsz, hy1 - bar_T - 3.2 * s, title, tsz, c, weight=600, fill="ink")
