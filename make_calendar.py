@@ -145,27 +145,35 @@ class Layer(list):
             if len(lower) >= 3:
                 self.poly([(qx + shift * math.cos(th), qy + shift * math.sin(th)) for qx, qy in lower], col_lo)
 
-    def seg_digit(self, d, x, top, w, h, T, gap, col):
-        """Seven-segment digit whose segments are long hexagons with 120° tips (the same
-        angle as the logo's hexagon corners), separated by small gaps."""
-        e = T / 2 / math.tan(math.radians(60))          # tip run for a 120° point
-        L, Rr = x + T / 2, x + w - T / 2                # vertical segment centre lines
-        Tt, M, B = top + T / 2, top + h / 2, top + h - T / 2
-
-        def hseg(y, xa, xb):
-            return [(xa, y), (xa + e, y - T / 2), (xb - e, y - T / 2), (xb, y), (xb - e, y + T / 2), (xa + e, y + T / 2)]
-
-        def vseg(xc, ya, yb):
-            return [(xc, ya), (xc + T / 2, ya + e), (xc + T / 2, yb - e), (xc, yb), (xc - T / 2, yb - e), (xc - T / 2, ya + e)]
-        segs = {
-            "a": hseg(Tt, L + gap, Rr - gap), "g": hseg(M, L + gap, Rr - gap), "d": hseg(B, L + gap, Rr - gap),
-            "f": vseg(L, Tt + gap, M - gap), "e": vseg(L, M + gap, B - gap),
-            "b": vseg(Rr, Tt + gap, M - gap), "c": vseg(Rr, M + gap, B - gap),
-        }
-        on = {"0": "abcdef", "1": "bc", "2": "abged", "3": "abgcd", "4": "fgbc",
-              "5": "afgcd", "6": "afgedc", "7": "abc", "8": "abcdefg", "9": "abcdfg"}[d]
-        for k in on:
-            self.poly(segs[k], col)
+    def digit(self, d, x, top, w, h, T, col):
+        """Angular display-style digit drawn as continuous strokes of width T: square
+        corners, with 30° chamfers (the slope of the logo hexagon's slanted edges) on the
+        top-left and bottom-right corners, and a 30° diagonal through the middle of 2."""
+        x0, x1 = x + T / 2, x + w - T / 2               # stroke centre lines
+        y0, ym, y1 = top + T / 2, top + h / 2, top + h - T / 2
+        c = 0.42 * w                                    # chamfer run
+        dc = c * math.tan(math.radians(30))             # chamfer drop
+        tl = [(x0, y0 + dc), (x0 + c, y0)]              # top-left chamfer, left side -> top
+        br = [(x1, y1 - dc), (x1 - c, y1)]              # bottom-right chamfer, right side -> bottom
+        diag = (x1 - x0) * math.tan(math.radians(30))
+        paths = {
+            "0": [[*tl, (x1, y0), *br, (x0, y1), tl[0]]],
+            "1": [[(x1 - c, y0), (x1, y0), (x1, y1)]],
+            "2": [[*tl, (x1, y0), (x1, ym - diag / 2), (x0, ym + diag / 2), (x0, y1), (x1, y1)]],
+            "3": [[(x0, y0), (x1, y0), *br, (x0, y1)], [(x0 + 0.35 * w, ym), (x1, ym)]],
+            "4": [[(x0, y0), (x0, ym), (x1, ym)], [(x1, y0 + dc), (x1, y1)]],
+            "5": [[(x1, y0), (x0, y0), (x0, ym), (x1 - c, ym), (x1, ym + dc), *br, (x0, y1)]],
+            "6": [[(x1, y0), *tl[::-1], (x0, y1), *br[::-1], (x1, ym), (x0, ym)]],
+            "7": [[*tl, (x1, y0), (x1, y1)]],
+            "8": [[*tl, (x1, y0), *br, (x0, y1), tl[0]], [(x0, ym), (x1, ym)]],
+            "9": [[(x1, ym), (x0, ym), *tl, (x1, y0), *br, (x0, y1)]],
+        }[d]
+        for pts in paths:
+            closed = pts[0] == pts[-1]
+            dpath = "M" + "L".join(f"{px:.3f} {py:.3f}" for px, py in (pts[:-1] if closed else pts))
+            self.append(f'<path d="{dpath}{"Z" if closed else ""}" fill="none" stroke="{col}" '
+                        f'stroke-width="{T:.3f}" stroke-linejoin="miter" stroke-miterlimit="10" '
+                        f'stroke-linecap="square"/>')
 
     def hatch(self, x0, y0, w, h, col, sw, step):
         """45° '/' hatching as plain vector lines (SVG patterns get rasterised in the PDF).
@@ -212,15 +220,15 @@ def build_svg(year, size, theme, bleed=0.0, week_start=0, font_base="fonts"):
     # ---------- header ----------
     ysz = 44 * s
     year_base = m + ysz * 0.727
-    # year in hex-segment digits, right-aligned, same height as the logo; second half in the accent
+    # year in angular display-style digits, right-aligned, same height as the logo; second half in the accent
     ys = str(year)
     yh = ysz * 0.73                              # digit height = logo height
     dw, dgap = 0.56 * yh, 0.2 * yh               # digit width, space between digits
-    seg_T, seg_gap = 3.2 * s, 1.1 * s            # segment thickness, gap between segments
+    stroke = 3.2 * s                             # digit stroke width
     x = W - m - len(ys) * dw - (len(ys) - 1) * dgap
     for i, ch in enumerate(ys):
         col = c["year_lo"] if i < len(ys) // 2 else c["accent"]
-        labels.seg_digit(ch, x + i * (dw + dgap), year_base - yh, dw, yh, seg_T, seg_gap, col)
+        labels.digit(ch, x + i * (dw + dgap), year_base - yh, dw, yh, stroke, col)
 
     labels.logo(m, year_base - ysz * 0.73, ysz * 0.73, c["year_lo"], c["accent"], c["accent"], s)
 
