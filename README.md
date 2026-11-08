@@ -20,7 +20,7 @@ This writes `out/<year>/calendar-<year>-<size>-<theme>.{svg,pdf,png}`:
 | `--year` | current year | |
 | `--size` | `A1` | one or more of `A0` `A1` `A2` `A3` `B1`. Everything scales with the page width |
 | `--theme` | `both` | `dark`, `grey` or `both` |
-| `--bleed` | `0` | mm added on each side. Leave at 0 for Officeworks |
+| `--bleed` | `0` | mm added on each side. Officeworks poster board needs 10 |
 | `--week-start` | `mon` | the day that gets the heavier rule (`sun` is also accepted) |
 | `--png-scale` | `2` | preview pixels per mm |
 | `--rgb` | off | skip the CMYK print conversion and keep Chrome's RGB PDF |
@@ -31,7 +31,9 @@ This writes `out/<year>/calendar-<year>-<size>-<theme>.{svg,pdf,png}`:
 The settings below match the Officeworks poster templates in `officeworks-templates/`:
 
 - **Sizes:** A1 is 594 × 841mm, A0 is 841 × 1189mm and B1 is 707 × 1000mm.
-- **Page and bleed:** the printable area is the whole page, so don't add bleed.
+- **Page and bleed:**
+  - **Posters:** the printable area is the whole page, so don't add bleed.
+  - **Poster board:** this needs 10mm of bleed on every side, for example 614 × 861mm for A1. Run it with `--bleed 10`. The background then extends to the larger size, the calendar stays the same size, and the extra 10mm is trimmed off or wrapped round the board.
 - **Colour:** files are CMYK. They're vector, so the 300dpi rule doesn't apply.
 - **Safe area:** about 5mm in from each edge. The template files don't draw this line; the figure comes from their original file names (e.g. `A1-584x831`). The calendar keeps everything at least 18mm from the edge.
 - **Ordering:** choose **Colour Poster**, not Plan Print. Plan Prints have to be 85% white or more, and both themes are coloured to the edge.
