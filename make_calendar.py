@@ -58,6 +58,12 @@ WD = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 
 MONO_ADV = 0.6  # JetBrains Mono advance width, em
 
+# header arrangement of logo and year:
+#   "split"   logo left, year right, both inset      "flush"  same, flush with the grid edges
+#   "swap"    year left, logo right, both inset      "right"  year then logo, grouped at the right
+#   "left"    logo then year, grouped at the left    "centre" logo then year, grouped in the middle
+HEADER_LAYOUT = "flush"
+
 
 def mix(a, b, f):
     """Blend hex colour a toward b by f (0..1). A solid blend instead of real
@@ -232,8 +238,16 @@ def build_svg(year, size, theme, bleed=0.0, week_start=0, font_base="fonts", tit
     yh = 0.7 * hh                                # year height (smaller than the logo)
     dw, dgap = 0.56 * yh, 0.2 * yh               # digit width, space between digits
     year_w = len(ys) * dw + (len(ys) - 1) * dgap
-    logo_x = m + inset
-    year_x = W - m - inset - year_w
+    pair_gap = 9 * s                             # space between logo and year when grouped
+    pair_w = logo_w + pair_gap + year_w
+    logo_x, year_x = {
+        "split": (m + inset, W - m - inset - year_w),
+        "flush": (m, W - m - year_w),
+        "swap": (W - m - inset - logo_w, m + inset),
+        "right": (W - m - logo_w, W - m - logo_w - pair_gap - year_w),
+        "left": (m, m + logo_w + pair_gap),
+        "centre": ((W - pair_w) / 2, (W - pair_w) / 2 + logo_w + pair_gap),
+    }[HEADER_LAYOUT]
     year_y = hy0 + (hh - yh) / 2                 # year centred vertically on the logo
 
     labels.logo(logo_x, hy0, hh, c["year_lo"], c["accent"], c["accent"], t=line)
