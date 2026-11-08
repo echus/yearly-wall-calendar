@@ -16,6 +16,7 @@ text outlined, and the page box set to the exact paper size.
 import argparse
 import calendar as cal
 import datetime as dt
+import math
 import os
 import re
 import shutil
@@ -104,7 +105,6 @@ class Layer(list):
         lower-right edges; everything below the cut slides along it, and the half-hexagon's
         lower piece can take its own colour (currently the accent too).
         Left edge at x, top at `top`, total height h. Filled polygons only (print-safe)."""
-        import math
         R = h / 2
         cx, cy = x + R * math.sqrt(3) / 2, top + R
         t = 2.4 * s                                     # ring thickness (measured radially)
@@ -144,6 +144,28 @@ class Layer(list):
                 self.poly(upper, col_up)
             if len(lower) >= 3:
                 self.poly([(qx + shift * math.cos(th), qy + shift * math.sin(th)) for qx, qy in lower], col_lo)
+
+    def seg_digit(self, d, x, top, w, h, T, gap, col):
+        """Seven-segment digit whose segments are long hexagons with 120° tips (the same
+        angle as the logo's hexagon corners), separated by small gaps."""
+        e = T / 2 / math.tan(math.radians(60))          # tip run for a 120° point
+        L, Rr = x + T / 2, x + w - T / 2                # vertical segment centre lines
+        Tt, M, B = top + T / 2, top + h / 2, top + h - T / 2
+
+        def hseg(y, xa, xb):
+            return [(xa, y), (xa + e, y - T / 2), (xb - e, y - T / 2), (xb, y), (xb - e, y + T / 2), (xa + e, y + T / 2)]
+
+        def vseg(xc, ya, yb):
+            return [(xc, ya), (xc + T / 2, ya + e), (xc + T / 2, yb - e), (xc, yb), (xc - T / 2, yb - e), (xc - T / 2, ya + e)]
+        segs = {
+            "a": hseg(Tt, L + gap, Rr - gap), "g": hseg(M, L + gap, Rr - gap), "d": hseg(B, L + gap, Rr - gap),
+            "f": vseg(L, Tt + gap, M - gap), "e": vseg(L, M + gap, B - gap),
+            "b": vseg(Rr, Tt + gap, M - gap), "c": vseg(Rr, M + gap, B - gap),
+        }
+        on = {"0": "abcdef", "1": "bc", "2": "abged", "3": "abgcd", "4": "fgbc",
+              "5": "afgcd", "6": "afgedc", "7": "abc", "8": "abcdefg", "9": "abcdfg"}[d]
+        for k in on:
+            self.poly(segs[k], col)
 
     def hatch(self, x0, y0, w, h, col, sw, step):
         """45° '/' hatching as plain vector lines (SVG patterns get rasterised in the PDF).
@@ -190,11 +212,15 @@ def build_svg(year, size, theme, bleed=0.0, week_start=0, font_base="fonts"):
     # ---------- header ----------
     ysz = 44 * s
     year_base = m + ysz * 0.727
-    ys = str(year)                               # second half of the year in the accent colour
-    labels.append(f'<text x="{W - m + 1.5 * s:.3f}" y="{year_base:.3f}" font-family="Cal Mono" '
-                  f'font-size="{ysz:.3f}" font-weight="500" letter-spacing="{-0.02 * ysz:.3f}" '
-                  f'text-anchor="end" fill="{c["year_lo"]}">{ys[:len(ys) // 2]}'
-                  f'<tspan fill="{c["accent"]}">{ys[len(ys) // 2:]}</tspan></text>')
+    # year in hex-segment digits, right-aligned, same height as the logo; second half in the accent
+    ys = str(year)
+    yh = ysz * 0.73                              # digit height = logo height
+    dw, dgap = 0.56 * yh, 0.2 * yh               # digit width, space between digits
+    seg_T, seg_gap = 3.2 * s, 1.1 * s            # segment thickness, gap between segments
+    x = W - m - len(ys) * dw - (len(ys) - 1) * dgap
+    for i, ch in enumerate(ys):
+        col = c["year_lo"] if i < len(ys) // 2 else c["accent"]
+        labels.seg_digit(ch, x + i * (dw + dgap), year_base - yh, dw, yh, seg_T, seg_gap, col)
 
     labels.logo(m, year_base - ysz * 0.73, ysz * 0.73, c["year_lo"], c["accent"], c["accent"], s)
 
