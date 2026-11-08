@@ -235,7 +235,7 @@ def build_svg(year, size, theme, bleed=0.0, week_start=0, font_base="fonts", tit
 
     # ---------- header ----------
     # logo | year, sharing top and bottom lines, framed between them by two rules: the bottom
-    # one with its accent bar at the logo end, the top one mirrored with its bar at the year end
+    # one with its heavier bar at the logo end, the top one mirrored with its bar at the year end (all grey)
     hy0, hy1 = m, m + hh
     labels.logo(m, hy0, hh, c["year_lo"], c["accent"], c["accent"])
     logo_w = hh * math.sqrt(3) / 2 + 0.081 * hh * math.cos(math.radians(30))
@@ -251,8 +251,8 @@ def build_svg(year, size, theme, bleed=0.0, week_start=0, font_base="fonts", tit
     rx1 = year_x - 6 * s
     bar_T, trace_th = 2.0 * s, 0.6 * s
     bar_len = 60 * s
-    rules.bar_rule(rx0, hy1, rx1 - rx0, bar_len, bar_T, trace_th, c["accent"], c["year_lo"])
-    rules.bar_rule(rx0, hy0, rx1 - rx0, bar_len, bar_T, trace_th, c["accent"], c["year_lo"], flip=True)
+    rules.bar_rule(rx0, hy1, rx1 - rx0, bar_len, bar_T, trace_th, c["year_lo"], c["year_lo"])
+    rules.bar_rule(rx0, hy0, rx1 - rx0, bar_len, bar_T, trace_th, c["year_lo"], c["year_lo"], flip=True)
     if title:                                    # optional title, sitting on the bottom bar
         tsz = 9 * s
         labels.text(rx0 - 0.04 * tsz, hy1 - bar_T - 3.2 * s, title, tsz, c, weight=600, fill="ink")
