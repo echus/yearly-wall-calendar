@@ -70,6 +70,24 @@ def mix(a, b, f):
     return "#" + "".join(f"{round(x + (y - x) * f):02X}" for x, y in zip(ca, cb))
 
 
+def convex_hull(pts):
+    """Monotone-chain convex hull, returned in order."""
+    pts = sorted(set((round(x, 4), round(y, 4)) for x, y in pts))
+    if len(pts) < 3:
+        return pts
+
+    def half(seq):
+        out = []
+        for q in seq:
+            while len(out) >= 2 and ((out[-1][0] - out[-2][0]) * (q[1] - out[-2][1])
+                                     - (out[-1][1] - out[-2][1]) * (q[0] - out[-2][0])) <= 0:
+                out.pop()
+            out.append(q)
+        return out
+    lower, upper = half(pts), half(reversed(pts))
+    return lower[:-1] + upper[:-1]
+
+
 class Layer(list):
     def text(self, x, y, t, size, c, weight=400, fill="ink", anchor="start", ls=0.0):
         ff = "Cal Mono"
@@ -140,13 +158,18 @@ class Layer(list):
                     out.append((a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u))
             return out
 
+        drawn = []
         for poly, col_up, col_lo in shapes:             # colours above / below the cut
             upper = clip(poly, lambda q: -gap / 2 - dist(q))
             lower = clip(poly, lambda q: dist(q) - gap / 2)
             if len(upper) >= 3:
                 self.poly(upper, col_up)
+                drawn += upper
             if len(lower) >= 3:
-                self.poly([(qx + shift * math.cos(th), qy + shift * math.sin(th)) for qx, qy in lower], col_lo)
+                moved = [(qx + shift * math.cos(th), qy + shift * math.sin(th)) for qx, qy in lower]
+                self.poly(moved, col_lo)
+                drawn += moved
+        return drawn                                    # every vertex drawn, for clear-space hulls
 
     def digit(self, d, x, top, w, h, T, col, angle=45):
         """Angular display-style digit drawn as continuous strokes of width T: square
@@ -180,12 +203,14 @@ class Layer(list):
             self.append(f'<path d="{dpath}{"Z" if closed else ""}" fill="none" stroke="{col}" '
                         f'stroke-width="{T:.3f}" stroke-linejoin="miter" stroke-miterlimit="10" '
                         f'stroke-linecap="square"/>')
+        return [q for pts in paths for q in pts]        # stroke centre-line points
 
     def pattern(self, poly, kind, col, s, from_right=False, avoid=()):
         """Fill a convex polygon with a vector pattern: "plus" (a grid of + marks), "dots"
         or "hatch" (45° lines). Grid patterns fit a whole number of rows to the height and
         start half a pitch in from the left edge (or the right edge if from_right), keeping
-        only marks wholly inside and clear of every polygon in `avoid`."""
+        only marks wholly inside and at least `margin` away from every (polygon, margin) in
+        `avoid`."""
         xs, ys = [q[0] for q in poly], [q[1] for q in poly]
         x0, x1, y0, y1 = min(xs), max(xs), min(ys), max(ys)
         n = len(poly)
@@ -198,8 +223,17 @@ class Layer(list):
                     hit = not hit
             return hit
 
+        def seg_dist(px, py, a, b):
+            ex, ey = b[0] - a[0], b[1] - a[1]
+            u = max(0.0, min(1.0, ((px - a[0]) * ex + (py - a[1]) * ey) / (ex * ex + ey * ey or 1)))
+            return math.hypot(px - a[0] - u * ex, py - a[1] - u * ey)
+
+        def near(av, margin, px, py):
+            return in_poly(av, px, py) or min(seg_dist(px, py, av[i], av[(i + 1) % len(av)])
+                                              for i in range(len(av))) < margin
+
         def inside(px, py):
-            return in_poly(poly, px, py) and not any(in_poly(av, px, py) for av in avoid)
+            return in_poly(poly, px, py) and not any(near(av, mg, px, py) for av, mg in avoid)
 
         if kind == "hatch":                           # 45° '/' lines, clipped to the polygon
             step = 2.2 * s
@@ -316,25 +350,23 @@ def build_svg(year, size, theme, bleed=0.0, week_start=0, font_base="fonts", tit
     rpanel = [(rx - slant, py0), (W - m, py0), (W - m, py1), (rx, py1), (rx - slant, py1 - slant)]
     year_y = hy0 + (hh - yh) / 2                 # year centred vertically on the logo
 
-    # clear space in the pattern: a hexagon around the logo, a rectangle around the year
-    clear = 2.6 * s
-    lcx, lcy = logo_x + hh * math.sqrt(3) / 4, hy0 + hh / 2
-    lr = hh / 2 + clear / math.cos(math.radians(30)) + 0.081 * hh / 2
-    logo_keepout = [(lcx + lr * math.cos(math.radians(-90 + 60 * k)),
-                     lcy + lr * math.sin(math.radians(-90 + 60 * k))) for k in range(6)]
-    year_keepout = [(year_x - clear, year_y - clear), (year_x + year_w + clear, year_y - clear),
-                    (year_x + year_w + clear, year_y + yh + clear), (year_x - clear, year_y + yh + clear)]
-    for panel, right, keepout in ((lpanel, False, logo_keepout), (rpanel, True, year_keepout)):
+    # logo and year first, so the panel pattern can keep a clear border around their outlines
+    logo_pts = labels.logo(logo_x, hy0, hh, c["year_lo"], c["accent"], c["accent"])
+    year_pts = []
+    yT = 0.1 * yh                                # digit stroke width
+    for i, ch in enumerate(ys):                  # year in angular digits, second half in the accent
+        col = c["year_lo"] if i < len(ys) // 2 else c["accent"]
+        year_pts += labels.digit(ch, year_x + i * (dw + dgap), year_y, dw, yh, yT, col)
+
+    clear = 2.0 * s                              # clear border around each element
+    keep = {False: [(convex_hull(logo_pts), clear)],
+            True: [(convex_hull(year_pts), clear + yT / 2)]}
+    for panel, right in ((lpanel, False), (rpanel, True)):
         if HEADER_FILL == "solid":
             fills.poly(panel, c["weekend"])
         else:
-            fills.pattern(panel, HEADER_FILL, c["hatch"], s, from_right=right, avoid=[keepout])
+            fills.pattern(panel, HEADER_FILL, c["hatch"], s, from_right=right, avoid=keep[right])
 
-    labels.logo(logo_x, hy0, hh, c["year_lo"], c["accent"], c["accent"])
-    # year in angular digits, second half in the accent
-    for i, ch in enumerate(ys):
-        col = c["year_lo"] if i < len(ys) // 2 else c["accent"]
-        labels.digit(ch, year_x + i * (dw + dgap), year_y, dw, yh, 0.1 * yh, col)
     if title:                                    # optional title, after the logo panel
         tsz = 9 * s
         labels.text(lx + slant + 8 * s, hy0 + hh - 1 * s, title, tsz, c, weight=600, fill="ink")
