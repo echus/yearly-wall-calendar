@@ -24,7 +24,7 @@ This writes `out/<year>/calendar-<year>-<size>-<theme>.{svg,pdf,png}`:
 | `--week-start` | `mon` | the day that gets the heavier rule (`sun` is also accepted) |
 | `--png-scale` | `2` | preview pixels per mm |
 | `--rgb` | off | skip the CMYK print conversion and keep Chrome's RGB PDF |
-| `--title` | none | optional title text, shown just after the logo's header panel |
+| `--title` | none | optional title text, shown to the right of the logo |
 
 ## Printing at Officeworks
 

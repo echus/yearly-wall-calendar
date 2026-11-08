@@ -58,9 +58,6 @@ WD = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 
 MONO_ADV = 0.6  # JetBrains Mono advance width, em
 
-# fill of the header panels behind the logo and year: "plus", "dots", "hatch" or "solid"
-HEADER_FILL = "plus"
-
 
 def mix(a, b, f):
     """Blend hex colour a toward b by f (0..1). A solid blend instead of real
@@ -68,24 +65,6 @@ def mix(a, b, f):
     ca = [int(a[i:i + 2], 16) for i in (1, 3, 5)]
     cb = [int(b[i:i + 2], 16) for i in (1, 3, 5)]
     return "#" + "".join(f"{round(x + (y - x) * f):02X}" for x, y in zip(ca, cb))
-
-
-def convex_hull(pts):
-    """Monotone-chain convex hull, returned in order."""
-    pts = sorted(set((round(x, 4), round(y, 4)) for x, y in pts))
-    if len(pts) < 3:
-        return pts
-
-    def half(seq):
-        out = []
-        for q in seq:
-            while len(out) >= 2 and ((out[-1][0] - out[-2][0]) * (q[1] - out[-2][1])
-                                     - (out[-1][1] - out[-2][1]) * (q[0] - out[-2][0])) <= 0:
-                out.pop()
-            out.append(q)
-        return out
-    lower, upper = half(pts), half(reversed(pts))
-    return lower[:-1] + upper[:-1]
 
 
 class Layer(list):
@@ -119,7 +98,7 @@ class Layer(list):
         self.poly([(x, y - th / 2), (x + w, y - th / 2), (x + w, yb), (x, yb)], col)
         self.poly([(x, yt), (xa, yt), (xa + ch, y - th / 2), (xa + ch, yb), (x, yb)], col)
 
-    def logo(self, x, top, h, ring_col, acc_col, ink_col):
+    def logo(self, x, top, h, ring_col, acc_col, ink_col, t=None):
         """Hex mark: a pointy-top hexagon ring (upper-left side in the accent colour) with
         the right half of a smaller hexagon filled in the accent colour inside it. A diagonal
         glitch slices through the centre parallel to the hexagon's upper-left and
@@ -128,7 +107,7 @@ class Layer(list):
         Left edge at x, top at `top`, total height h. Filled polygons only (print-safe)."""
         R = h / 2
         cx, cy = x + R * math.sqrt(3) / 2, top + R
-        t = 0.075 * h                                   # ring thickness (measured radially)
+        t = t or 0.075 * h                              # ring thickness (measured radially)
         ri = R - t / math.cos(math.radians(30))         # inner radius giving constant side width
         ang = [math.radians(-90 + 60 * k) for k in range(7)]
         P = lambda r, a: (cx + r * math.cos(a), cy + r * math.sin(a))
@@ -158,18 +137,13 @@ class Layer(list):
                     out.append((a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u))
             return out
 
-        drawn = []
         for poly, col_up, col_lo in shapes:             # colours above / below the cut
             upper = clip(poly, lambda q: -gap / 2 - dist(q))
             lower = clip(poly, lambda q: dist(q) - gap / 2)
             if len(upper) >= 3:
                 self.poly(upper, col_up)
-                drawn += upper
             if len(lower) >= 3:
-                moved = [(qx + shift * math.cos(th), qy + shift * math.sin(th)) for qx, qy in lower]
-                self.poly(moved, col_lo)
-                drawn += moved
-        return drawn                                    # every vertex drawn, for clear-space hulls
+                self.poly([(qx + shift * math.cos(th), qy + shift * math.sin(th)) for qx, qy in lower], col_lo)
 
     def digit(self, d, x, top, w, h, T, col, angle=45):
         """Angular display-style digit drawn as continuous strokes of width T: square
@@ -203,86 +177,6 @@ class Layer(list):
             self.append(f'<path d="{dpath}{"Z" if closed else ""}" fill="none" stroke="{col}" '
                         f'stroke-width="{T:.3f}" stroke-linejoin="miter" stroke-miterlimit="10" '
                         f'stroke-linecap="square"/>')
-        return [q for pts in paths for q in pts]        # stroke centre-line points
-
-    def pattern(self, poly, kind, col, s, from_right=False, avoid=()):
-        """Fill a convex polygon with a vector pattern: "plus" (a grid of + marks), "dots"
-        or "hatch" (45° lines). Grid patterns fit a whole number of rows to the height and
-        start half a pitch in from the left edge (or the right edge if from_right), keeping
-        only marks wholly inside and at least `margin` away from every (polygon, margin) in
-        `avoid`."""
-        xs, ys = [q[0] for q in poly], [q[1] for q in poly]
-        x0, x1, y0, y1 = min(xs), max(xs), min(ys), max(ys)
-        n = len(poly)
-
-        def in_poly(pg, px, py):                      # ray casting
-            hit = False
-            for i in range(len(pg)):
-                (ax, ay), (bx, by) = pg[i], pg[(i + 1) % len(pg)]
-                if (ay > py) != (by > py) and px < ax + (py - ay) * (bx - ax) / (by - ay):
-                    hit = not hit
-            return hit
-
-        def seg_dist(px, py, a, b):
-            ex, ey = b[0] - a[0], b[1] - a[1]
-            u = max(0.0, min(1.0, ((px - a[0]) * ex + (py - a[1]) * ey) / (ex * ex + ey * ey or 1)))
-            return math.hypot(px - a[0] - u * ex, py - a[1] - u * ey)
-
-        def near(av, margin, px, py):
-            return in_poly(av, px, py) or min(seg_dist(px, py, av[i], av[(i + 1) % len(av)])
-                                              for i in range(len(av))) < margin
-
-        def inside(px, py):
-            return in_poly(poly, px, py) and not any(near(av, mg, px, py) for av, mg in avoid)
-
-        if kind == "hatch":                           # 45° '/' lines, clipped to the polygon
-            step = 2.2 * s
-            d, dk = [], step * 2 ** 0.5
-            k = (math.floor((x0 + y0) / dk) + 1) * dk
-            while k < x1 + y1:
-                # parametrise the line x + y = k from its bbox entry to exit, then clip
-                ta, tb = max(x0, k - y1), min(x1, k - y0)
-                for i in range(n):                    # Cyrus-Beck against each edge
-                    (ax, ay), (bx, by) = poly[i], poly[(i + 1) % n]
-                    ex, ey = bx - ax, by - ay
-                    # side value along the line at x = u: (u - ax) * ey - (k - u - ay) * ex
-                    fa = (ta - ax) * ey - (k - ta - ay) * ex
-                    fb = (tb - ax) * ey - (k - tb - ay) * ex
-                    sign = -1 if sum((poly[j][0] - ax) * ey - (poly[j][1] - ay) * ex for j in range(n)) < 0 else 1
-                    fa, fb = fa * sign, fb * sign
-                    if fa < 0 and fb < 0:
-                        ta, tb = 1, 0
-                        break
-                    if fa < 0:
-                        ta = ta + (tb - ta) * fa / (fa - fb)
-                    elif fb < 0:
-                        tb = tb + (ta - tb) * fb / (fb - fa)
-                if tb > ta:
-                    d.append(f"M{ta:.3f} {k - ta:.3f}L{tb:.3f} {k - tb:.3f}")
-                k += dk
-            self.append(f'<path d="{"".join(d)}" stroke="{col}" stroke-width="{0.35 * s:.3f}" fill="none"/>')
-            return
-
-        rows = max(1, round((y1 - y0) / (4.0 * s)))
-        pitch = (y1 - y0) / rows
-        a = 0.9 * s if kind == "plus" else 0.45 * s   # plus arm / dot radius
-        cols = int((x1 - x0) / pitch) + 1
-        xs0 = (x1 - pitch / 2 - (cols - 1) * pitch) if from_right else (x0 + pitch / 2)
-        d = []
-        for r in range(rows):
-            y = y0 + pitch / 2 + r * pitch
-            for ci in range(cols):
-                x = xs0 + ci * pitch
-                if all(inside(x + u, y + v) for u, v in ((-a, 0), (a, 0), (0, -a), (0, a), (0, 0))):
-                    if kind == "plus":
-                        d.append(f"M{x - a:.3f} {y:.3f}H{x + a:.3f}M{x:.3f} {y - a:.3f}V{y + a:.3f}")
-                    else:                             # dot as a tiny round-capped stroke
-                        d.append(f"M{x:.3f} {y:.3f}h0.001")
-        if kind == "plus":
-            self.append(f'<path d="{"".join(d)}" stroke="{col}" stroke-width="{0.35 * s:.3f}" fill="none"/>')
-        else:
-            self.append(f'<path d="{"".join(d)}" stroke="{col}" stroke-width="{2 * a:.3f}" '
-                        f'stroke-linecap="round" fill="none"/>')
 
     def hatch(self, x0, y0, w, h, col, sw, step):
         """45° '/' hatching as plain vector lines (SVG patterns get rasterised in the PDF).
@@ -310,7 +204,7 @@ def build_svg(year, size, theme, bleed=0.0, week_start=0, font_base="fonts", tit
 
     m = 18 * s          # page margin
     hh = 22 * s         # height of the logo and year
-    hpad = 4 * s        # padding inside the header panels
+    hpad = 4 * s        # space above and below the logo
     head_h = hh + 2 * hpad + 9 * s  # header block, down to the month names
     mhead_h = 14 * s    # month-name row
     foot_h = 11 * s
@@ -329,47 +223,26 @@ def build_svg(year, size, theme, bleed=0.0, week_start=0, font_base="fonts", tit
     label_y = lambda y: y + 1.4 * s + dsz * 0.73   # baseline of labels in a row starting at y
 
     # ---------- header ----------
-    # logo and year each on a grey panel; each panel's inner edge runs 45° for half its height,
-    # then is cut off vertically (slanted + upright sides, like the hexagon). The logo's panel
-    # widens towards the bottom and the year's towards the top
-    py0, py1 = m, m + hh + 2 * hpad              # panel top and bottom
-    hy0 = py0 + hpad                             # top of logo and year
-    slant = (py1 - py0) / 2                      # 45° edge over half the height, then vertical
-    reach = 44 * s                               # extra panel length towards the middle
+    # logo on the left, year on the right, drawn with the same line thickness
+    hy0 = m + hpad                               # top of the logo
+    inset = hpad + 22 * s                        # logo/year distance in from the grid edges
+    line = 0.075 * hh                            # shared stroke: logo frame and year digits
     logo_w = hh * math.sqrt(3) / 2 + 0.081 * hh * math.cos(math.radians(30))
     ys = str(year)
     yh = 0.7 * hh                                # year height (smaller than the logo)
     dw, dgap = 0.56 * yh, 0.2 * yh               # digit width, space between digits
     year_w = len(ys) * dw + (len(ys) - 1) * dgap
-
-    lx = m + hpad + logo_w + hpad + reach        # logo panel: square left, slanted right
-    logo_x = (m + lx - logo_w) / 2               # logo centred in the panel's rectangular part
-    lpanel = [(m, py0), (lx, py0), (lx + slant, py0 + slant), (lx + slant, py1), (m, py1)]
-    rx = W - m - hpad - year_w - hpad - reach    # year panel: slanted left, square right
-    year_x = (rx + W - m - year_w) / 2           # year centred in the panel's rectangular part
-    rpanel = [(rx - slant, py0), (W - m, py0), (W - m, py1), (rx, py1), (rx - slant, py1 - slant)]
+    logo_x = m + inset
+    year_x = W - m - inset - year_w
     year_y = hy0 + (hh - yh) / 2                 # year centred vertically on the logo
 
-    # logo and year first, so the panel pattern can optionally keep a clear border round them
-    logo_pts = labels.logo(logo_x, hy0, hh, c["year_lo"], c["accent"], c["accent"])
-    year_pts = []
-    yT = 0.1 * yh                                # digit stroke width
+    labels.logo(logo_x, hy0, hh, c["year_lo"], c["accent"], c["accent"], t=line)
     for i, ch in enumerate(ys):                  # year in angular digits, second half in the accent
         col = c["year_lo"] if i < len(ys) // 2 else c["accent"]
-        year_pts += labels.digit(ch, year_x + i * (dw + dgap), year_y, dw, yh, yT, col)
-
-    clear = None                                 # e.g. 2.0 * s for a clear border round each element
-    keep = ({False: [(convex_hull(logo_pts), clear)], True: [(convex_hull(year_pts), clear + yT / 2)]}
-            if clear else {False: [], True: []})
-    for panel, right in ((lpanel, False), (rpanel, True)):
-        if HEADER_FILL == "solid":
-            fills.poly(panel, c["weekend"])
-        else:
-            fills.pattern(panel, HEADER_FILL, c["hatch"], s, from_right=right, avoid=keep[right])
-
-    if title:                                    # optional title, after the logo panel
+        labels.digit(ch, year_x + i * (dw + dgap), year_y, dw, yh, line, col)
+    if title:                                    # optional title, right of the logo
         tsz = 9 * s
-        labels.text(lx + slant + 8 * s, hy0 + hh - 1 * s, title, tsz, c, weight=600, fill="ink")
+        labels.text(logo_x + logo_w + 10 * s, hy0 + hh / 2 + tsz * 0.36, title, tsz, c, weight=600, fill="ink")
 
     # ---------- month names ----------
     for mi in range(12):
@@ -563,7 +436,7 @@ def main():
     ap.add_argument("--no-png", action="store_true")
     ap.add_argument("--png-scale", type=float, default=2.0, help="preview pixels per mm")
     ap.add_argument("--rgb", action="store_true", help="skip the Ghostscript CMYK/print pass")
-    ap.add_argument("--title", default="", help="optional header title, shown after the logo panel")
+    ap.add_argument("--title", default="", help="optional header title, shown right of the logo")
     o = ap.parse_args()
 
     need_chrome = not (o.no_pdf and o.no_png)
