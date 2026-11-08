@@ -98,7 +98,7 @@ class Layer(list):
         self.poly([(x, y - th / 2), (x + w, y - th / 2), (x + w, yb), (x, yb)], col)
         self.poly([(x, yt), (xa, yt), (xa + ch, y - th / 2), (xa + ch, yb), (x, yb)], col)
 
-    def logo(self, x, top, h, ring_col, acc_col, ink_col, s):
+    def logo(self, x, top, h, ring_col, acc_col, ink_col):
         """Hex mark: a pointy-top hexagon ring (upper-left side in the accent colour) with
         the right half of a smaller hexagon filled in the accent colour inside it. A diagonal
         glitch slices through the centre parallel to the hexagon's upper-left and
@@ -107,7 +107,7 @@ class Layer(list):
         Left edge at x, top at `top`, total height h. Filled polygons only (print-safe)."""
         R = h / 2
         cx, cy = x + R * math.sqrt(3) / 2, top + R
-        t = 2.4 * s                                     # ring thickness (measured radially)
+        t = 0.075 * h                                   # ring thickness (measured radially)
         ri = R - t / math.cos(math.radians(30))         # inner radius giving constant side width
         ang = [math.radians(-90 + 60 * k) for k in range(7)]
         P = lambda r, a: (cx + r * math.cos(a), cy + r * math.sin(a))
@@ -115,14 +115,14 @@ class Layer(list):
         for k in range(6):
             col = acc_col if k == 5 else ring_col       # upper-left side picks up the accent
             shapes.append(([P(R, ang[k]), P(R, ang[k + 1]), P(ri, ang[k + 1]), P(ri, ang[k])], col, col))
-        rh = ri - 2.2 * s                               # inner half-hexagon, inset from the ring
+        rh = ri - 0.068 * h                             # inner half-hexagon, inset from the ring
         shapes.append(([P(rh, math.radians(a)) for a in (-90, -30, 30, 90)], acc_col, ink_col))
 
         # glitch: a cut rising to the right through the lower half
         th = math.radians(-30)                          # parallel to a hex edge (y is down)
         p0 = (cx, cy)                                   # cut passes through the centre
         nx, ny = -math.sin(th), math.cos(th)            # unit normal, pointing down-ish
-        gap, shift = t, 2.6 * s                         # slit width = ring thickness; slide along cut
+        gap, shift = t, 0.081 * h                       # slit width = ring thickness; slide along cut
         dist = lambda q: (q[0] - p0[0]) * nx + (q[1] - p0[1]) * ny
 
         def clip(poly, keep):                           # Sutherland-Hodgman against keep(q) >= 0
@@ -178,6 +178,15 @@ class Layer(list):
                         f'stroke-width="{T:.3f}" stroke-linejoin="miter" stroke-miterlimit="10" '
                         f'stroke-linecap="square"/>')
 
+    def bar_rule(self, x, yb, w, bar_len, T, th, bar_col, trace_col):
+        """Header connector, a large cousin of the week-start rule: a thin trace of width w
+        with its bottom edge on yb, and a heavy bar of length bar_len rising above it on the
+        left, ending in a 45° chamfer."""
+        self.poly([(x, yb - th), (x + w, yb - th), (x + w, yb), (x, yb)], trace_col)
+        ch = T - th
+        self.poly([(x, yb - T), (x + bar_len, yb - T), (x + bar_len + ch, yb - th), (x + bar_len + ch, yb),
+                   (x, yb)], bar_col)
+
     def hatch(self, x0, y0, w, h, col, sw, step):
         """45° '/' hatching as plain vector lines (SVG patterns get rasterised in the PDF).
         Lines are x + y = k on a page-wide grid so neighbouring cells line up."""
@@ -193,7 +202,7 @@ class Layer(list):
         self.append(f'<path d="{"".join(d)}" stroke="{col}" stroke-width="{sw:.3f}" fill="none"/>')
 
 
-def build_svg(year, size, theme, bleed=0.0, week_start=0, font_base="fonts"):
+def build_svg(year, size, theme, bleed=0.0, week_start=0, font_base="fonts", title="year planner"):
     """Return SVG markup; user units are mm. week_start: 0=Monday, 6=Sunday."""
     c = dict(THEMES[theme])
     c["year_lo"] = mix(c["ink"], c["bg"], 0.7)    # faded first half of the year
@@ -203,7 +212,8 @@ def build_svg(year, size, theme, bleed=0.0, week_start=0, font_base="fonts"):
     PW, PH = W + 2 * bleed, H + 2 * bleed
 
     m = 18 * s          # page margin
-    head_h = 41 * s     # year header block
+    hh = 22 * s         # height of the header row (logo, title, year)
+    head_h = hh + 10 * s  # header block, down to the month names
     mhead_h = 14 * s    # month-name row
     foot_h = 11 * s
 
@@ -221,19 +231,25 @@ def build_svg(year, size, theme, bleed=0.0, week_start=0, font_base="fonts"):
     label_y = lambda y: y + 1.4 * s + dsz * 0.73   # baseline of labels in a row starting at y
 
     # ---------- header ----------
-    ysz = 44 * s
-    year_base = m + ysz * 0.727
-    # year in angular display-style digits, right-aligned, same height as the logo; second half in the accent
-    ys = str(year)
-    yh = ysz * 0.73                              # digit height = logo height
-    dw, dgap = 0.56 * yh, 0.2 * yh               # digit width, space between digits
-    stroke = 3.2 * s                             # digit stroke width
-    x = W - m - len(ys) * dw - (len(ys) - 1) * dgap
+    # logo | title over an accent bar | thin trace | year, all sharing top and bottom lines
+    hy0, hy1 = m, m + hh
+    labels.logo(m, hy0, hh, c["year_lo"], c["accent"], c["accent"])
+    logo_w = hh * math.sqrt(3) / 2 + 0.081 * hh * math.cos(math.radians(30))
+
+    ys = str(year)                               # year in angular digits, second half in the accent
+    dw, dgap = 0.56 * hh, 0.2 * hh               # digit width, space between digits
+    year_x = W - m - len(ys) * dw - (len(ys) - 1) * dgap
     for i, ch in enumerate(ys):
         col = c["year_lo"] if i < len(ys) // 2 else c["accent"]
-        labels.digit(ch, x + i * (dw + dgap), year_base - yh, dw, yh, stroke, col)
+        labels.digit(ch, year_x + i * (dw + dgap), hy0, dw, hh, 0.1 * hh, col)
 
-    labels.logo(m, year_base - ysz * 0.73, ysz * 0.73, c["year_lo"], c["accent"], c["accent"], s)
+    rx0 = m + logo_w + 5 * s                     # connector from the logo to the year
+    rx1 = year_x - 6 * s
+    tsz = 9 * s                                  # title size
+    title_w = len(title) * tsz * MONO_ADV
+    bar_T, trace_th = 2.0 * s, 0.6 * s
+    rules.bar_rule(rx0, hy1, rx1 - rx0, title_w + 2 * s, bar_T, trace_th, c["accent"], c["year_lo"])
+    labels.text(rx0 - 0.04 * tsz, hy1 - bar_T - 3.2 * s, title, tsz, c, weight=600, fill="ink")
 
     # ---------- month names ----------
     for mi in range(12):
@@ -427,6 +443,7 @@ def main():
     ap.add_argument("--no-png", action="store_true")
     ap.add_argument("--png-scale", type=float, default=2.0, help="preview pixels per mm")
     ap.add_argument("--rgb", action="store_true", help="skip the Ghostscript CMYK/print pass")
+    ap.add_argument("--title", default="year planner", help="header title text")
     o = ap.parse_args()
 
     need_chrome = not (o.no_pdf and o.no_png)
@@ -452,8 +469,8 @@ def render(o, size, th, ws, outdir, chrome_bin, cmyk):
     stem = outdir / f"calendar-{o.year}-{tag}-{th}"
     # SVG file references fonts relatively so it opens in an editor; Chrome gets absolute URIs
     rel = Path(os.path.relpath(FONTS, outdir)).as_posix()
-    Path(f"{stem}.svg").write_text(build_svg(o.year, size, th, o.bleed, ws, rel), encoding="utf-8")
-    svg = build_svg(o.year, size, th, o.bleed, ws, FONTS.as_uri())
+    Path(f"{stem}.svg").write_text(build_svg(o.year, size, th, o.bleed, ws, rel, o.title), encoding="utf-8")
+    svg = build_svg(o.year, size, th, o.bleed, ws, FONTS.as_uri(), o.title)
     made = ["svg"]
     with tempfile.TemporaryDirectory() as td:
         if not o.no_pdf:
