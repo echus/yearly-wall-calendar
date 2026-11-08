@@ -350,7 +350,7 @@ def build_svg(year, size, theme, bleed=0.0, week_start=0, font_base="fonts", tit
     rpanel = [(rx - slant, py0), (W - m, py0), (W - m, py1), (rx, py1), (rx - slant, py1 - slant)]
     year_y = hy0 + (hh - yh) / 2                 # year centred vertically on the logo
 
-    # logo and year first, so the panel pattern can keep a clear border around their outlines
+    # logo and year first, so the panel pattern can optionally keep a clear border round them
     logo_pts = labels.logo(logo_x, hy0, hh, c["year_lo"], c["accent"], c["accent"])
     year_pts = []
     yT = 0.1 * yh                                # digit stroke width
@@ -358,9 +358,9 @@ def build_svg(year, size, theme, bleed=0.0, week_start=0, font_base="fonts", tit
         col = c["year_lo"] if i < len(ys) // 2 else c["accent"]
         year_pts += labels.digit(ch, year_x + i * (dw + dgap), year_y, dw, yh, yT, col)
 
-    clear = 2.0 * s                              # clear border around each element
-    keep = {False: [(convex_hull(logo_pts), clear)],
-            True: [(convex_hull(year_pts), clear + yT / 2)]}
+    clear = None                                 # e.g. 2.0 * s for a clear border round each element
+    keep = ({False: [(convex_hull(logo_pts), clear)], True: [(convex_hull(year_pts), clear + yT / 2)]}
+            if clear else {False: [], True: []})
     for panel, right in ((lpanel, False), (rpanel, True)):
         if HEADER_FILL == "solid":
             fills.poly(panel, c["weekend"])
