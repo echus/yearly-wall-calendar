@@ -58,9 +58,6 @@ WD = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 
 MONO_ADV = 0.6  # JetBrains Mono advance width, em
 
-# where the header rules' thick bars sit: (top rule, bottom rule), each "left", "right" or "both"
-HEADER_BARS = ("both", "both")
-
 
 def mix(a, b, f):
     """Blend hex colour a toward b by f (0..1). A solid blend instead of real
@@ -181,22 +178,6 @@ class Layer(list):
                         f'stroke-width="{T:.3f}" stroke-linejoin="miter" stroke-miterlimit="10" '
                         f'stroke-linecap="square"/>')
 
-    def bar_rule(self, x, edge, w, bar_len, T, th, bar_col, trace_col, top=False, ends="left"):
-        """Header rule, a large cousin of the week-start rule: a thin trace of width w with
-        one edge on `edge` (its bottom edge, or its top edge if top=True), plus heavy bars of
-        length bar_len (or a (left, right) pair) growing away from that edge at the "left",
-        "right" or "both" ends,
-        each finishing in a 45° chamfer towards the middle."""
-        ch = T - th
-        sy = -1 if not top else 1                       # direction away from the edge
-        self.poly([(x, edge + sy * th), (x + w, edge + sy * th), (x + w, edge), (x, edge)], trace_col)
-        len_l, len_r = bar_len if isinstance(bar_len, tuple) else (bar_len, bar_len)
-        bar = lambda n: [(0, T), (n, T), (n + ch, th), (n + ch, 0), (0, 0)]
-        if ends in ("left", "both"):
-            self.poly([(x + u, edge + sy * v) for u, v in bar(len_l)], bar_col)
-        if ends in ("right", "both"):
-            self.poly([(x + w - u, edge + sy * v) for u, v in bar(len_r)], bar_col)
-
     def hatch(self, x0, y0, w, h, col, sw, step):
         """45° '/' hatching as plain vector lines (SVG patterns get rasterised in the PDF).
         Lines are x + y = k on a page-wide grid so neighbouring cells line up."""
@@ -223,9 +204,8 @@ def build_svg(year, size, theme, bleed=0.0, week_start=0, font_base="fonts", tit
 
     m = 18 * s          # page margin
     hh = 22 * s         # height of the logo and year
-    bar_T, trace_th = 2.0 * s, 0.6 * s  # header rule: bar and thin trace thickness
-    hpad = 3.5 * s      # space between the header rules' bars and the logo/year
-    head_h = hh + 2 * (bar_T + hpad) + 9 * s  # header block, down to the month names
+    hpad = 4 * s        # padding inside the header panels
+    head_h = hh + 2 * hpad + 9 * s  # header block, down to the month names
     mhead_h = 14 * s    # month-name row
     foot_h = 11 * s
 
@@ -243,30 +223,29 @@ def build_svg(year, size, theme, bleed=0.0, week_start=0, font_base="fonts", tit
     label_y = lambda y: y + 1.4 * s + dsz * 0.73   # baseline of labels in a row starting at y
 
     # ---------- header ----------
-    # two full-width grey rules, top and bottom; their heavier chamfered bars bracket the
-    # logo on the left and the year on the right, the thin traces run between them
-    ry0 = m                                      # top edge of the top rule
-    hy0 = ry0 + bar_T + hpad                     # top of logo and year
-    hy1 = hy0 + hh                               # bottom of logo and year
-    ry1 = hy1 + hpad + bar_T                     # bottom edge of the bottom rule
-    labels.logo(m, hy0, hh, c["year_lo"], c["accent"], c["accent"])
+    # logo and year each on a grey panel; each panel's inner edge slants at 45°, the logo's
+    # widening towards the bottom and the year's towards the top (parallel, point-symmetric)
+    py0, py1 = m, m + hh + 2 * hpad              # panel top and bottom
+    hy0 = py0 + hpad                             # top of logo and year
+    slant = py1 - py0                            # 45°: horizontal run equals panel height
     logo_w = hh * math.sqrt(3) / 2 + 0.081 * hh * math.cos(math.radians(30))
-
-    ys = str(year)                               # year in angular digits, second half in the accent
+    ys = str(year)
     dw, dgap = 0.56 * hh, 0.2 * hh               # digit width, space between digits
     year_w = len(ys) * dw + (len(ys) - 1) * dgap
-    year_x = W - m - year_w
+
+    lx = m + hpad + logo_w + hpad                # logo panel: square left, slanted right
+    fills.poly([(m, py0), (lx, py0), (lx + slant, py1), (m, py1)], c["weekend"])
+    rx = W - m - hpad - year_w - hpad            # year panel: slanted left, square right
+    fills.poly([(rx - slant, py0), (W - m, py0), (W - m, py1), (rx, py1)], c["weekend"])
+
+    labels.logo(m + hpad, hy0, hh, c["year_lo"], c["accent"], c["accent"])
+    year_x = W - m - hpad - year_w               # year in angular digits, second half in the accent
     for i, ch in enumerate(ys):
         col = c["year_lo"] if i < len(ys) // 2 else c["accent"]
         labels.digit(ch, year_x + i * (dw + dgap), hy0, dw, hh, 0.1 * hh, col)
-
-    bars = (logo_w + 4 * s, year_w + 4 * s)      # each bar spans its element plus a little
-    rules.bar_rule(m, ry1, W - 2 * m, bars, bar_T, trace_th, c["year_lo"], c["year_lo"], ends=HEADER_BARS[1])
-    rules.bar_rule(m, ry0, W - 2 * m, bars, bar_T, trace_th, c["year_lo"], c["year_lo"], top=True,
-                   ends=HEADER_BARS[0])
-    if title:                                    # optional title, left of centre between the rules
+    if title:                                    # optional title, after the logo panel
         tsz = 9 * s
-        labels.text(m + bars[0] + 12 * s, hy1 - 2 * s, title, tsz, c, weight=600, fill="ink")
+        labels.text(lx + slant + 8 * s, hy0 + hh - 1 * s, title, tsz, c, weight=600, fill="ink")
 
     # ---------- month names ----------
     for mi in range(12):
@@ -460,7 +439,7 @@ def main():
     ap.add_argument("--no-png", action="store_true")
     ap.add_argument("--png-scale", type=float, default=2.0, help="preview pixels per mm")
     ap.add_argument("--rgb", action="store_true", help="skip the Ghostscript CMYK/print pass")
-    ap.add_argument("--title", default="", help="optional header title, shown on the bottom rule")
+    ap.add_argument("--title", default="", help="optional header title, shown after the logo panel")
     o = ap.parse_args()
 
     need_chrome = not (o.no_pdf and o.no_png)
