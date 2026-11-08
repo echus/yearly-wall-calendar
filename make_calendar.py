@@ -145,10 +145,10 @@ class Layer(list):
             if len(lower) >= 3:
                 self.poly([(qx + shift * math.cos(th), qy + shift * math.sin(th)) for qx, qy in lower], col_lo)
 
-    def digit(self, d, x, top, w, h, T, col, angle=30):
+    def digit(self, d, x, top, w, h, T, col, angle=45):
         """Angular display-style digit drawn as continuous strokes of width T: square
-        corners, with 30° chamfers (the slope of the logo hexagon's slanted edges) on the
-        top-left and bottom-right corners. The 2's diagonal runs at the same angle from the right side
+        corners, with chamfers at `angle` on the top-left and bottom-right corners. Every
+        diagonal shares that angle: the 2's diagonal runs from the right side
         almost into the bottom-left corner (a short upright keeps the joint from spiking)."""
         x0, x1 = x + T / 2, x + w - T / 2               # stroke centre lines
         y0, ym, y1 = top + T / 2, top + h / 2, top + h - T / 2
@@ -158,13 +158,14 @@ class Layer(list):
         tl = [(x0, y0 + dc), (x0 + c, y0)]              # top-left chamfer, left side -> top
         br = [(x1, y1 - dc), (x1 - c, y1)]              # bottom-right chamfer, right side -> bottom
         foot = T * 0.9                                  # short upright at the 2's bottom-left
+        c5 = min(c, (y1 - dc - T - ym) / slope)         # 5's mid chamfer, kept clear of the bottom one
         paths = {
             "0": [[*tl, (x1, y0), *br, (x0, y1), tl[0]]],
             "1": [[(x1 - c, y0), (x1, y0), (x1, y1)]],
             "2": [[*tl, (x1, y0), (x1, y1 - foot - (x1 - x0) * slope), (x0, y1 - foot), (x0, y1), (x1, y1)]],
             "3": [[(x0, y0), (x1, y0), *br, (x0, y1)], [(x0 + 0.35 * w, ym - 0.07 * h), (x1, ym - 0.07 * h)]],
             "4": [[(x0, y0), (x0, ym), (x1, ym)], [(x1, y0 + dc), (x1, y1)]],
-            "5": [[(x1, y0), (x0, y0), (x0, ym), (x1 - c, ym), (x1, ym + dc), *br, (x0, y1)]],
+            "5": [[(x1, y0), (x0, y0), (x0, ym), (x1 - c5, ym), (x1, ym + c5 * slope), *br, (x0, y1)]],
             "6": [[(x1, y0), *tl[::-1], (x0, y1), *br[::-1], (x1, ym), (x0, ym)]],
             "7": [[*tl, (x1, y0), (x1, y1)]],
             "8": [[*tl, (x1, y0), *br, (x0, y1), tl[0]], [(x0, ym), (x1, ym)]],
