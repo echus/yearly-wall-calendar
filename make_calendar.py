@@ -178,14 +178,17 @@ class Layer(list):
                         f'stroke-width="{T:.3f}" stroke-linejoin="miter" stroke-miterlimit="10" '
                         f'stroke-linecap="square"/>')
 
-    def bar_rule(self, x, yb, w, bar_len, T, th, bar_col, trace_col):
-        """Header connector, a large cousin of the week-start rule: a thin trace of width w
-        with its bottom edge on yb, and a heavy bar of length bar_len rising above it on the
-        left, ending in a 45° chamfer."""
-        self.poly([(x, yb - th), (x + w, yb - th), (x + w, yb), (x, yb)], trace_col)
+    def bar_rule(self, x, edge, w, bar_len, T, th, bar_col, trace_col, flip=False):
+        """Header rule, a large cousin of the week-start rule: a thin trace of width w with
+        one edge on `edge`, and a heavy bar of length bar_len growing away from that edge,
+        ending in a 45° chamfer. By default the edge is the bottom and the bar sits on the
+        left; flip=True mirrors both (edge on top, bar on the right)."""
         ch = T - th
-        self.poly([(x, yb - T), (x + bar_len, yb - T), (x + bar_len + ch, yb - th), (x + bar_len + ch, yb),
-                   (x, yb)], bar_col)
+        trace = [(0, -th), (w, -th), (w, 0), (0, 0)]
+        bar = [(0, -T), (bar_len, -T), (bar_len + ch, -th), (bar_len + ch, 0), (0, 0)]
+        place = (lambda u, v: (x + w - u, edge - v)) if flip else (lambda u, v: (x + u, edge + v))
+        self.poly([place(u, v) for u, v in trace], trace_col)
+        self.poly([place(u, v) for u, v in bar], bar_col)
 
     def hatch(self, x0, y0, w, h, col, sw, step):
         """45° '/' hatching as plain vector lines (SVG patterns get rasterised in the PDF).
@@ -202,7 +205,7 @@ class Layer(list):
         self.append(f'<path d="{"".join(d)}" stroke="{col}" stroke-width="{sw:.3f}" fill="none"/>')
 
 
-def build_svg(year, size, theme, bleed=0.0, week_start=0, font_base="fonts", title="year planner"):
+def build_svg(year, size, theme, bleed=0.0, week_start=0, font_base="fonts", title=""):
     """Return SVG markup; user units are mm. week_start: 0=Monday, 6=Sunday."""
     c = dict(THEMES[theme])
     c["year_lo"] = mix(c["ink"], c["bg"], 0.7)    # faded first half of the year
@@ -231,7 +234,8 @@ def build_svg(year, size, theme, bleed=0.0, week_start=0, font_base="fonts", tit
     label_y = lambda y: y + 1.4 * s + dsz * 0.73   # baseline of labels in a row starting at y
 
     # ---------- header ----------
-    # logo | title over an accent bar | thin trace | year, all sharing top and bottom lines
+    # logo | year, sharing top and bottom lines, framed between them by two rules: the bottom
+    # one with its accent bar at the logo end, the top one mirrored with its bar at the year end
     hy0, hy1 = m, m + hh
     labels.logo(m, hy0, hh, c["year_lo"], c["accent"], c["accent"])
     logo_w = hh * math.sqrt(3) / 2 + 0.081 * hh * math.cos(math.radians(30))
@@ -245,11 +249,13 @@ def build_svg(year, size, theme, bleed=0.0, week_start=0, font_base="fonts", tit
 
     rx0 = m + logo_w + 5 * s                     # connector from the logo to the year
     rx1 = year_x - 6 * s
-    tsz = 9 * s                                  # title size
-    title_w = len(title) * tsz * MONO_ADV
     bar_T, trace_th = 2.0 * s, 0.6 * s
-    rules.bar_rule(rx0, hy1, rx1 - rx0, title_w + 2 * s, bar_T, trace_th, c["accent"], c["year_lo"])
-    labels.text(rx0 - 0.04 * tsz, hy1 - bar_T - 3.2 * s, title, tsz, c, weight=600, fill="ink")
+    bar_len = 60 * s
+    rules.bar_rule(rx0, hy1, rx1 - rx0, bar_len, bar_T, trace_th, c["accent"], c["year_lo"])
+    rules.bar_rule(rx0, hy0, rx1 - rx0, bar_len, bar_T, trace_th, c["accent"], c["year_lo"], flip=True)
+    if title:                                    # optional title, sitting on the bottom bar
+        tsz = 9 * s
+        labels.text(rx0 - 0.04 * tsz, hy1 - bar_T - 3.2 * s, title, tsz, c, weight=600, fill="ink")
 
     # ---------- month names ----------
     for mi in range(12):
@@ -443,7 +449,7 @@ def main():
     ap.add_argument("--no-png", action="store_true")
     ap.add_argument("--png-scale", type=float, default=2.0, help="preview pixels per mm")
     ap.add_argument("--rgb", action="store_true", help="skip the Ghostscript CMYK/print pass")
-    ap.add_argument("--title", default="year planner", help="header title text")
+    ap.add_argument("--title", default="", help="optional header title, shown on the bottom rule")
     o = ap.parse_args()
 
     need_chrome = not (o.no_pdf and o.no_png)
