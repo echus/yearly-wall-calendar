@@ -148,19 +148,20 @@ class Layer(list):
     def digit(self, d, x, top, w, h, T, col):
         """Angular display-style digit drawn as continuous strokes of width T: square
         corners, with 30° chamfers (the slope of the logo hexagon's slanted edges) on the
-        top-left and bottom-right corners, and a 30° diagonal through the middle of 2."""
+        top-left and bottom-right corners. The 2's diagonal runs at 45° from the right side
+        almost into the bottom-left corner (a short upright keeps the joint from spiking)."""
         x0, x1 = x + T / 2, x + w - T / 2               # stroke centre lines
         y0, ym, y1 = top + T / 2, top + h / 2, top + h - T / 2
         c = 0.42 * w                                    # chamfer run
         dc = c * math.tan(math.radians(30))             # chamfer drop
         tl = [(x0, y0 + dc), (x0 + c, y0)]              # top-left chamfer, left side -> top
         br = [(x1, y1 - dc), (x1 - c, y1)]              # bottom-right chamfer, right side -> bottom
-        diag = (x1 - x0) * math.tan(math.radians(30))
+        foot = T * 0.9                                  # short upright at the 2's bottom-left
         paths = {
             "0": [[*tl, (x1, y0), *br, (x0, y1), tl[0]]],
             "1": [[(x1 - c, y0), (x1, y0), (x1, y1)]],
-            "2": [[*tl, (x1, y0), (x1, ym - diag / 2), (x0, ym + diag / 2), (x0, y1), (x1, y1)]],
-            "3": [[(x0, y0), (x1, y0), *br, (x0, y1)], [(x0 + 0.35 * w, ym), (x1, ym)]],
+            "2": [[*tl, (x1, y0), (x1, y1 - foot - (x1 - x0)), (x0, y1 - foot), (x0, y1), (x1, y1)]],
+            "3": [[(x0, y0), (x1, y0), *br, (x0, y1)], [(x0 + 0.35 * w, ym - 0.07 * h), (x1, ym - 0.07 * h)]],
             "4": [[(x0, y0), (x0, ym), (x1, ym)], [(x1, y0 + dc), (x1, y1)]],
             "5": [[(x1, y0), (x0, y0), (x0, ym), (x1 - c, ym), (x1, ym + dc), *br, (x0, y1)]],
             "6": [[(x1, y0), *tl[::-1], (x0, y1), *br[::-1], (x1, ym), (x0, ym)]],
