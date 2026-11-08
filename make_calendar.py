@@ -184,16 +184,18 @@ class Layer(list):
     def bar_rule(self, x, edge, w, bar_len, T, th, bar_col, trace_col, top=False, ends="left"):
         """Header rule, a large cousin of the week-start rule: a thin trace of width w with
         one edge on `edge` (its bottom edge, or its top edge if top=True), plus heavy bars of
-        length bar_len growing away from that edge at the "left", "right" or "both" ends,
+        length bar_len (or a (left, right) pair) growing away from that edge at the "left",
+        "right" or "both" ends,
         each finishing in a 45° chamfer towards the middle."""
         ch = T - th
         sy = -1 if not top else 1                       # direction away from the edge
         self.poly([(x, edge + sy * th), (x + w, edge + sy * th), (x + w, edge), (x, edge)], trace_col)
-        bar = [(0, T), (bar_len, T), (bar_len + ch, th), (bar_len + ch, 0), (0, 0)]
+        len_l, len_r = bar_len if isinstance(bar_len, tuple) else (bar_len, bar_len)
+        bar = lambda n: [(0, T), (n, T), (n + ch, th), (n + ch, 0), (0, 0)]
         if ends in ("left", "both"):
-            self.poly([(x + u, edge + sy * v) for u, v in bar], bar_col)
+            self.poly([(x + u, edge + sy * v) for u, v in bar(len_l)], bar_col)
         if ends in ("right", "both"):
-            self.poly([(x + w - u, edge + sy * v) for u, v in bar], bar_col)
+            self.poly([(x + w - u, edge + sy * v) for u, v in bar(len_r)], bar_col)
 
     def hatch(self, x0, y0, w, h, col, sw, step):
         """45° '/' hatching as plain vector lines (SVG patterns get rasterised in the PDF).
@@ -220,8 +222,10 @@ def build_svg(year, size, theme, bleed=0.0, week_start=0, font_base="fonts", tit
     PW, PH = W + 2 * bleed, H + 2 * bleed
 
     m = 18 * s          # page margin
-    hh = 22 * s         # height of the header row (logo, title, year)
-    head_h = hh + 10 * s  # header block, down to the month names
+    hh = 22 * s         # height of the logo and year
+    bar_T, trace_th = 2.0 * s, 0.6 * s  # header rule: bar and thin trace thickness
+    hpad = 3.5 * s      # space between the header rules' bars and the logo/year
+    head_h = hh + 2 * (bar_T + hpad) + 9 * s  # header block, down to the month names
     mhead_h = 14 * s    # month-name row
     foot_h = 11 * s
 
@@ -239,30 +243,30 @@ def build_svg(year, size, theme, bleed=0.0, week_start=0, font_base="fonts", tit
     label_y = lambda y: y + 1.4 * s + dsz * 0.73   # baseline of labels in a row starting at y
 
     # ---------- header ----------
-    # logo | year, sharing top and bottom lines, with a frame between them: two grey rules,
-    # each with heavier chamfered bars at the ends set by HEADER_BARS
-    hy0, hy1 = m, m + hh
+    # two full-width grey rules, top and bottom; their heavier chamfered bars bracket the
+    # logo on the left and the year on the right, the thin traces run between them
+    ry0 = m                                      # top edge of the top rule
+    hy0 = ry0 + bar_T + hpad                     # top of logo and year
+    hy1 = hy0 + hh                               # bottom of logo and year
+    ry1 = hy1 + hpad + bar_T                     # bottom edge of the bottom rule
     labels.logo(m, hy0, hh, c["year_lo"], c["accent"], c["accent"])
     logo_w = hh * math.sqrt(3) / 2 + 0.081 * hh * math.cos(math.radians(30))
 
     ys = str(year)                               # year in angular digits, second half in the accent
     dw, dgap = 0.56 * hh, 0.2 * hh               # digit width, space between digits
-    year_x = W - m - len(ys) * dw - (len(ys) - 1) * dgap
+    year_w = len(ys) * dw + (len(ys) - 1) * dgap
+    year_x = W - m - year_w
     for i, ch in enumerate(ys):
         col = c["year_lo"] if i < len(ys) // 2 else c["accent"]
         labels.digit(ch, year_x + i * (dw + dgap), hy0, dw, hh, 0.1 * hh, col)
 
-    rx0 = m + logo_w + 9 * s                     # connector from the logo to the year
-    rx1 = year_x - 9 * s
-    bar_T, trace_th = 2.0 * s, 0.6 * s
-    bar_len = 60 * s
-    rules.bar_rule(rx0, hy1, rx1 - rx0, bar_len, bar_T, trace_th, c["year_lo"], c["year_lo"],
-                   ends=HEADER_BARS[1])
-    rules.bar_rule(rx0, hy0, rx1 - rx0, bar_len, bar_T, trace_th, c["year_lo"], c["year_lo"],
-                   top=True, ends=HEADER_BARS[0])
-    if title:                                    # optional title, sitting on the bottom bar
+    bars = (logo_w + 4 * s, year_w + 4 * s)      # each bar spans its element plus a little
+    rules.bar_rule(m, ry1, W - 2 * m, bars, bar_T, trace_th, c["year_lo"], c["year_lo"], ends=HEADER_BARS[1])
+    rules.bar_rule(m, ry0, W - 2 * m, bars, bar_T, trace_th, c["year_lo"], c["year_lo"], top=True,
+                   ends=HEADER_BARS[0])
+    if title:                                    # optional title, left of centre between the rules
         tsz = 9 * s
-        labels.text(rx0 - 0.04 * tsz, hy1 - bar_T - 3.2 * s, title, tsz, c, weight=600, fill="ink")
+        labels.text(m + bars[0] + 12 * s, hy1 - 2 * s, title, tsz, c, weight=600, fill="ink")
 
     # ---------- month names ----------
     for mi in range(12):
