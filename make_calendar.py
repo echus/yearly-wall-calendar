@@ -223,11 +223,12 @@ def build_svg(year, size, theme, bleed=0.0, week_start=0, font_base="fonts", tit
     label_y = lambda y: y + 1.4 * s + dsz * 0.73   # baseline of labels in a row starting at y
 
     # ---------- header ----------
-    # logo and year each on a grey panel; each panel's inner edge slants at 60° (the hexagon's
-    # angle), the logo's widening towards the bottom and the year's towards the top
+    # logo and year each on a grey panel; each panel's inner edge runs 45° for half its height,
+    # then is cut off vertically (slanted + upright sides, like the hexagon). The logo's panel
+    # widens towards the bottom and the year's towards the top
     py0, py1 = m, m + hh + 2 * hpad              # panel top and bottom
     hy0 = py0 + hpad                             # top of logo and year
-    slant = (py1 - py0) / math.tan(math.radians(60))  # horizontal run of the 60° edge
+    slant = (py1 - py0) / 2                      # 45° edge over half the height, then vertical
     reach = 18 * s                               # extra panel length towards the middle
     logo_w = hh * math.sqrt(3) / 2 + 0.081 * hh * math.cos(math.radians(30))
     ys = str(year)
@@ -235,9 +236,10 @@ def build_svg(year, size, theme, bleed=0.0, week_start=0, font_base="fonts", tit
     year_w = len(ys) * dw + (len(ys) - 1) * dgap
 
     lx = m + hpad + logo_w + hpad + reach        # logo panel: square left, slanted right
-    fills.poly([(m, py0), (lx, py0), (lx + slant, py1), (m, py1)], c["weekend"])
+    fills.poly([(m, py0), (lx, py0), (lx + slant, py0 + slant), (lx + slant, py1), (m, py1)], c["weekend"])
     rx = W - m - hpad - year_w - hpad - reach    # year panel: slanted left, square right
-    fills.poly([(rx - slant, py0), (W - m, py0), (W - m, py1), (rx, py1)], c["weekend"])
+    fills.poly([(rx - slant, py0), (W - m, py0), (W - m, py1), (rx, py1), (rx - slant, py1 - slant)],
+               c["weekend"])
 
     labels.logo(m + hpad, hy0, hh, c["year_lo"], c["accent"], c["accent"])
     year_x = W - m - hpad - year_w               # year in angular digits, second half in the accent
