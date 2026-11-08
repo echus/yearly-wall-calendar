@@ -9,6 +9,9 @@ python3 make_calendar.py --year 2027 --size A0 A1 B1
 This writes `out/<year>/calendar-<year>-<size>-<theme>.{svg,pdf,png}`:
 
 - **pdf**: the print file. It is CMYK, with text converted to outlines, and the page is exactly the paper size.
+  - Every grey prints in black ink only, so it stays truly neutral. Each one is tone-matched to look as light or dark as it does on screen.
+  - The dark background is the one exception: full black plus a light neutral C/M/Y underlay, since black ink alone can't print that dark.
+  - The accent prints as a fixed CMYK colour, set by `accent_cmyk` in `THEMES`.
 - **svg**: editable in Illustrator, Figma or Affinity. Its fonts load from `fonts/`.
 - **png**: a low-resolution RGB preview.
 

@@ -46,8 +46,8 @@ THEMES = {
     # mid-light grey, light enough for ordinary pen/pencil to read
     "grey": dict(
         bg="#D4D4D4", ink="#111111", muted="#595959", rule="#A1A1A1",
-        weekend="#C4C4C4", hatch="#AAAAAA", accent="#D9480F",  # orange
-        accent_cmyk=(0, 0.80, 1, 0.08),
+        weekend="#C4C4C4", hatch="#AAAAAA", accent="#EE4E22",  # red-orange
+        accent_cmyk=(0, 0.82, 1, 0),                    # vivid process red-orange (no black)
     ),
 }
 
@@ -289,34 +289,75 @@ def run_chrome(chrome_bin, args):
                    check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
+# How Ghostscript's default CMYK profile renders black ink alone, as the sRGB grey it
+# looks like, for K = 0, 0.05 ... 1. Used to pick the K that prints each design grey
+# at the same lightness as on screen.
+K_CURVE = [255, 241, 230, 220, 209, 199, 188, 177, 167, 157, 147, 138, 128, 119, 109, 99, 88, 77, 65, 51, 35]
+# Same for full black plus a neutral underlay t * (C .4, M .3, Y .3), t = 0, 0.1 ... 1,
+# for greys darker than black ink alone can reach (the dark background).
+RICH_CURVE = [33, 29, 26, 24, 20, 18, 15, 11, 8, 4, 2]
+UNDERLAY = (0.4, 0.3, 0.3)
+
+
+def _inverse(curve, v, step):
+    """Position along a descending curve where it reaches grey level v."""
+    if v >= curve[0]:
+        return 0.0
+    for i in range(len(curve) - 1):
+        hi, lo = curve[i], curve[i + 1]
+        if hi >= v >= lo:
+            return (i + (hi - v) / (hi - lo)) * step
+    return (len(curve) - 1) * step
+
+
+def print_cmyk(v, rich=False):
+    """CMYK that prints sRGB grey level v (0-255) neutrally: black ink only, or for
+    greys darker than K alone (only if `rich`), K100 plus a light neutral underlay."""
+    if v < K_CURVE[-1] and rich:
+        u = _inverse(RICH_CURVE, v, 0.1)
+        return (UNDERLAY[0] * u, UNDERLAY[1] * u, UNDERLAY[2] * u, 1.0)
+    return (0, 0, 0, _inverse(K_CURVE, v, 0.05))
+
+
+def fmt_cmyk(vals):
+    return " ".join(f"{v:.3f}".rstrip("0").rstrip(".") or "0" for v in vals).encode()
+
+
 def gray_to_k(pdf_bytes, remap=()):
-    """Rewrite neutral CMYK fills/strokes (C = M = Y) as black-ink-only, so greys print
-    truly neutral instead of as a CMY mix, and swap any colour listed in `remap`
+    """Rewrite neutral CMYK fills/strokes (C = M = Y, from the plain RGB->CMYK pass) as
+    black-ink-only greys of matching lightness, and swap any colour listed in `remap`
     ((from_cmyk, to_cmyk) pairs) for its chosen print value. Replacements are padded
     to the original length, so stream lengths and the xref table stay valid."""
     num = rb"(\d*\.?\d+)"
     pat = re.compile(rb"(?<![\w.])" + rb" ".join([num] * 4) + rb" ([kK])(?![\w])")
+    skipped = []
 
     def sub(mo):
         cur = tuple(float(x) for x in mo.groups()[:4])
         cv, mv, yv, kv = cur
         for src, dst in remap:
-            if all(abs(a - b) < 0.004 for a, b in zip(cur, src)):
-                new = " ".join(f"{v:.4g}" for v in dst).encode() + b" " + mo.group(5)
+            if all(abs(a - b) < 0.01 for a, b in zip(cur, src)):
+                new = fmt_cmyk(dst) + b" " + mo.group(5)
                 break
         else:
             if not (cv == mv == yv) or cv == 0:
                 return mo.group(0)
-            new = f"0 0 0 {1 - (1 - cv) * (1 - kv):.4g} ".encode() + mo.group(5)
+            new = fmt_cmyk(print_cmyk(255 * (1 - cv) * (1 - kv))) + b" " + mo.group(5)
         old = mo.group(0)
-        return new + b" " * (len(old) - len(new)) if len(new) <= len(old) else old
-    return pat.sub(sub, pdf_bytes)
+        if len(new) > len(old):
+            skipped.append(old)
+            return old
+        return new + b" " * (len(old) - len(new))
+    out = pat.sub(sub, pdf_bytes)
+    if skipped:
+        print(f"warning: {len(skipped)} colour(s) left unconverted: {set(skipped)}", file=sys.stderr)
+    return out
 
 
 def to_print_pdf(src, dst, w_mm, h_mm, theme):
-    """Ghostscript passes for print shops: CMYK, greys as black ink only, text to
-    outlines (Chrome embeds the variable font as Type3 glyphs, which some RIPs
-    dislike), exact page size."""
+    """Ghostscript passes for print shops: CMYK with neutral greys printed in black ink
+    (tone-matched to the design), text to outlines (Chrome embeds the variable font as
+    Type3 glyphs, which some RIPs dislike), exact page size."""
     pt = 72 / 25.4
     gs = ["gs", "-q", "-dBATCH", "-dNOPAUSE", "-dSAFER", "-sDEVICE=pdfwrite", "-dCompatibilityLevel=1.6",
           "-dFIXEDMEDIA", f"-dDEVICEWIDTHPOINTS={w_mm * pt:.4f}", f"-dDEVICEHEIGHTPOINTS={h_mm * pt:.4f}"]
@@ -326,10 +367,12 @@ def to_print_pdf(src, dst, w_mm, h_mm, theme):
         subprocess.run(gs + ["-sColorConversionStrategy=CMYK", "-dProcessColorModel=/DeviceCMYK",
                              "-dUseFastColor", "-dNoOutputFonts", "-dPDFFitPage", "-dCompressPages=false",
                              f"-sOutputFile={a}", str(src)], check=True)
-        # 2: those greys -> K only; accent -> its chosen CMYK
-        acc = THEMES[theme]["accent"]
-        fast = tuple(1 - int(acc[i:i + 2], 16) / 255 for i in (1, 3, 5)) + (0,)
-        b.write_bytes(gray_to_k(a.read_bytes(), [(fast, THEMES[theme]["accent_cmyk"])]))
+        # 2: greys -> tone-matched K; accent -> its chosen CMYK; background may use a rich black
+        th = THEMES[theme]
+        fast = lambda hx: tuple(1 - int(hx[i:i + 2], 16) / 255 for i in (1, 3, 5)) + (0,)
+        remap = [(fast(th["accent"]), th["accent_cmyk"]),
+                 (fast(th["bg"]), print_cmyk(int(th["bg"][1:3], 16), rich=True))]
+        b.write_bytes(gray_to_k(a.read_bytes(), remap))
         # 3: recompress, colours untouched
         subprocess.run(gs + ["-sColorConversionStrategy=LeaveColorUnchanged", f"-sOutputFile={dst}", str(b)],
                        check=True)
