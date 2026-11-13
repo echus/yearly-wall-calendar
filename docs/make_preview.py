@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build docs/preview.png: close-ups of the grey (left, logo corner) and dark (right,
+"""Build docs/preview.png: close-ups of the dark (left, logo corner) and grey (right,
 year corner) A1 calendars, joined by a slanted cut with a small gap.
 
     python3 docs/make_preview.py [--year 2077]
@@ -45,9 +45,9 @@ def main():
 
     a, b = half + SLANT / 2, half - SLANT / 2    # cut x at top and bottom
     g = GAP / 2
-    left = crop("grey", 0, 0, f"0 0,{a - g:.0f}px 0,{b - g:.0f}px 100%,0 100%")
+    left = crop("dark", 0, 0, f"0 0,{a - g:.0f}px 0,{b - g:.0f}px 100%,0 100%")
     lx = OUT_W - side                            # right half's left edge in the image
-    right = crop("dark", W - side_mm, lx,
+    right = crop("grey", W - side_mm, lx,
                  f"{a + g - lx:.0f}px 0,100% 0,100% 100%,{b + g - lx:.0f}px 100%")
     html = (f"<!doctype html><html><head><meta charset='utf-8'><style>html,body{{margin:0;background:transparent}}"
             f".wrap{{position:relative;width:{OUT_W}px;height:{out_h}px;overflow:hidden}}</style></head>"
