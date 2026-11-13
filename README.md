@@ -8,7 +8,7 @@ A printable year planner. Each month is a column, and each day has a cell to wri
 
 - Python 3 (standard library only)
 - Google Chrome, to render the PDF and PNG
-- Ghostscript, to convert the PDF to CMYK: `brew install ghostscript`
+- Ghostscript, to convert the PDF to CMYK
 
 ## Usage
 
