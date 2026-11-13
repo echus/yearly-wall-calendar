@@ -165,6 +165,8 @@ class Layer(list):
         br = [(x1, y1 - dc), (x1 - c, y1)]              # bottom-right chamfer, right side -> bottom
         foot = T * 0.9                                  # short upright at the 2's bottom-left
         c5 = min(c, (y1 - dc - T - ym) / slope)         # 5's mid chamfer, kept clear of the bottom one
+        x7 = x0 + 0.3 * (x1 - x0)                       # 7's stem: diagonal from the right to here
+        y7 = y0 + 0.07 * h                              # 7: short upright before the diagonal
         paths = {
             "0": [[*tl, (x1, y0), *br, (x0, y1), tl[0]]],
             "1": [[(x1 - c, y0), (x1, y0), (x1, y1)]],
@@ -173,7 +175,7 @@ class Layer(list):
             "4": [[(x0, y0), (x0, ym), (x1, ym)], [(x1, y0 + dc), (x1, y1)]],
             "5": [[(x1, y0), (x0, y0), (x0, ym), (x1 - c5, ym), (x1, ym + c5 * slope), *br, (x0, y1)]],
             "6": [[(x1, y0), *tl[::-1], (x0, y1), *br[::-1], (x1, ym), (x0, ym)]],
-            "7": [[*tl, (x1, y0), (x1, y1)]],
+            "7": [[(x0, y0), (x1, y0), (x1, y7), (x7, y7 + (x1 - x7) * slope), (x7, y1)]],
             "8": [[*tl, (x1, y0), *br, (x0, y1), tl[0]], [(x0, ym), (x1, ym)]],
             "9": [[(x1, ym), (x0, ym), *tl, (x1, y0), *br, (x0, y1)]],
         }[d]
