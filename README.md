@@ -1,47 +1,67 @@
-# Yearly wall calendar
+# yearly-wall-calendar
 
-A vertical year planner with 12 month columns and 31 day rows, so every day gets its own writable cell. It comes in two themes: `dark` and `grey`.
+![Dark and grey A1 calendars for 2026](docs/preview.png)
+
+A printable year planner. Each month is a column, and each day has a cell to write in. It comes in dark and grey themes, in sizes A0–A3 and B1.
+
+## Requirements
+
+- Python 3 (standard library only)
+- Google Chrome, to render the PDF and PNG
+- Ghostscript, to convert the PDF to CMYK: `brew install ghostscript`
+
+## Usage
+
+Make a calendar:
 
 ```bash
-python3 make_calendar.py --year 2027 --size A0 A1 B1
+python3 make_calendar.py --year 2027
 ```
 
-This writes `out/<year>/calendar-<year>-<size>-<theme>.{svg,pdf,png}`:
+The script writes these files to `out/<year>/` for each size and theme:
 
-- **pdf**: the print file. It is CMYK, with text converted to outlines, and the page is exactly the paper size.
-  - Every grey prints in black ink only, so it stays truly neutral. Each one is tone-matched to look as light or dark as it does on screen.
-  - The dark background is the one exception: full black plus a light neutral C/M/Y underlay, since black ink alone can't print that dark.
-  - The accent prints as a fixed CMYK colour, set by `accent_cmyk` in `THEMES`.
-- **svg**: editable in Illustrator, Figma or Affinity. Its fonts load from `fonts/`.
-- **png**: a low-resolution RGB preview.
+| file | use |
+|---|---|
+| `.pdf` | print file: CMYK, exact paper size, text as outlines |
+| `.svg` | editable vector file |
+| `.png` | preview |
 
 | option | default | |
 |---|---|---|
 | `--year` | current year | |
-| `--size` | `A1` | one or more of `A0` `A1` `A2` `A3` `B1`. Everything scales with the page width |
+| `--size` | `A1` | one or more of `A0` `A1` `A2` `A3` `B1` |
 | `--theme` | `both` | `dark`, `grey` or `both` |
-| `--bleed` | `0` | mm added on each side. Officeworks poster board needs 10 |
-| `--week-start` | `mon` | the day that gets the heavier rule (`sun` is also accepted) |
+| `--bleed` | `0` | mm to add on each side |
+| `--week-start` | `mon` | `mon` or `sun` |
+| `--title` | none | text to show next to the logo |
+| `--rgb` | off | keep the PDF in RGB |
 | `--png-scale` | `2` | preview pixels per mm |
-| `--rgb` | off | skip the CMYK print conversion and keep Chrome's RGB PDF |
-| `--title` | none | optional title text, shown to the right of the logo |
 
-## Printing at Officeworks
+If Chrome is not in `/Applications`, set its path:
 
-The settings below match the Officeworks poster templates in `officeworks-templates/`:
+```bash
+CHROME=/path/to/chrome python3 make_calendar.py
+```
 
-- **Sizes:** A1 is 594 × 841mm, A0 is 841 × 1189mm and B1 is 707 × 1000mm.
-- **Page and bleed:**
-  - **Posters:** the printable area is the whole page, so don't add bleed.
-  - **Poster board:** this needs 10mm of bleed on every side, for example 614 × 861mm for A1. Run it with `--bleed 10`. The background then extends to the larger size, the calendar stays the same size, and the extra 10mm is trimmed off or wrapped round the board.
-- **Colour:** files are CMYK. They're vector, so the 300dpi rule doesn't apply.
-- **Safe area:** about 5mm in from each edge. The template files don't draw this line; the figure comes from their original file names (e.g. `A1-584x831`). The calendar keeps everything at least 18mm from the edge.
-- **Ordering:** choose **Colour Poster**, not Plan Print. Plan Prints have to be 85% white or more, and both themes are coloured to the edge.
+If Ghostscript is not installed, the PDF stays in RGB.
 
-## Requirements
+## Print
 
-- **Python:** the script uses only the standard library.
-- **Chrome:** renders the PDF and PNG. If Chrome is somewhere other than `/Applications`, set `CHROME=/path/to/chrome`.
-- **Ghostscript:** does the CMYK print conversion. Install it with `brew install ghostscript`. Without it, the PDF stays RGB and the script prints a warning.
+1. Use the PDF file.
+2. Select the paper size that is the same as the PDF size.
+3. For a poster, do not add bleed.
+4. For a mounted poster board, add 10 mm bleed with `--bleed 10`.
+5. Select a colour print option. Do not select "Plan Print", because a plan print must be 85% white or more.
 
-The only font is JetBrains Mono (OFL license), stored in `fonts/`.
+All greys print with black ink only. The accent prints as a fixed CMYK colour.
+
+## Customise
+
+Edit these values at the top of `make_calendar.py`:
+
+- `THEMES`: the colours of each theme. `accent_cmyk` is the printed accent colour.
+- `HEADER_LAYOUT`: the positions of the logo and the year.
+
+## Font
+
+JetBrains Mono (OFL licence), in `fonts/`.
