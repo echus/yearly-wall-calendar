@@ -1,6 +1,6 @@
 # yearly-wall-calendar
 
-![Close-up of the grey and dark 2026 calendars](docs/preview.png)
+![Close-up of the grey and dark 2077 calendars](docs/preview.png)
 
 A printable year planner. Each month is a column, and each day has a cell to write in. Generate it for any year, in a dark or grey theme, in sizes A0–A3 and B1.
 
