@@ -2,7 +2,7 @@
 """Build docs/preview.png: close-ups of the dark (left, logo corner) and grey (right,
 year corner) A1 calendars, joined by a slanted cut with a small gap.
 
-    python3 docs/make_preview.py [--year 2077]
+    python3 docs/make_preview.py [--year 2049]
 """
 
 import argparse
@@ -24,7 +24,7 @@ GAP = 14            # gap between the halves, px
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--year", type=int, default=2077)
+    ap.add_argument("--year", type=int, default=2049)
     year = ap.parse_args().year
 
     W, H = mc.SIZES["A1"]
